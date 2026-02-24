@@ -81,6 +81,14 @@ body {
 Place Your Order
 </h3>
 
+<!-- Success Message -->
+{% if success %}
+<div class="alert alert-success text-center">
+<i class="fa-solid fa-circle-check me-2"></i>
+Order placed successfully!
+</div>
+{% endif %}
+
 <form method="POST" action="/place_order">
 
 <div class="mb-4">
@@ -149,6 +157,7 @@ function addProduct() {
     section.appendChild(newRow);
 }
 
+// Remove row
 document.addEventListener("click", function(e) {
     if (e.target.closest(".remove-btn")) {
         const rows = document.querySelectorAll(".product-row");
