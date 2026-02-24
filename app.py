@@ -9,18 +9,15 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 db_path = os.path.join(BASE_DIR, "database.db")
 
 
-# ---------------- DATABASE CONNECTION ----------------
 def get_connection():
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-# ---------------- INITIALIZE DATABASE ----------------
 def init_db():
     conn = get_connection()
 
-    # PRODUCTS TABLE
     conn.execute("""
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +26,6 @@ def init_db():
         )
     """)
 
-    # ORDERS TABLE
     conn.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +37,6 @@ def init_db():
         )
     """)
 
-    # USERS TABLE
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,23 +49,22 @@ def init_db():
     # Insert products if empty
     count = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
     if count == 0:
+        products = [
+            ("Parle-G 50g", 5),
+            ("Parle-G 100g", 10),
+            ("Parle-G 200g", 20),
+            ("Parle-G Gold 100g", 15),
+            ("Parle-G Gold 200g", 30),
+            ("Monaco 50g", 10),
+            ("Monaco 200g", 40),
+            ("Krackjack 50g", 10),
+            ("Krackjack 100g", 30),
+        ]
         conn.executemany(
-            "INSERT INTO products (name, price) VALUES (?, ?)",
-            [
-                ('Parle-G 50g', 5),
-                ('Parle-G 100g', 10),
-                ('Parle-G 200g', 20),
-                ('Parle-G Gold 100g', 15),
-                ('Parle-G Gold 200g', 30),
-                ('Monaco 50g', 10),
-                ('Monaco 200g', 40),
-                ('Monaco Sixer', 10),
-                ('Krackjack 50g', 10),
-                ('Krackjack 100g', 30)
-            ]
+            "INSERT INTO products (name, price) VALUES (?, ?)", products
         )
 
-    # Insert admin user if not exists
+    # Insert admin user
     user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     if user_count == 0:
         conn.execute(
@@ -82,8 +76,6 @@ def init_db():
     conn.close()
 
 
-# 🔥 VERY IMPORTANT FOR RENDER
-# This forces DB creation when gunicorn loads the app
 with app.app_context():
     init_db()
 
@@ -92,9 +84,13 @@ with app.app_context():
 @app.route('/')
 def index():
     conn = get_connection()
-    products = conn.execute("SELECT * FROM products").fetchall()
+    products = conn.execute(
+        "SELECT * FROM products ORDER BY name ASC"
+    ).fetchall()
     conn.close()
-    return render_template("index.html", products=products)
+
+    success = request.args.get("success")
+    return render_template("index.html", products=products, success=success)
 
 
 # ---------------- PLACE ORDER ----------------
@@ -117,7 +113,7 @@ def place_order():
     conn.commit()
     conn.close()
 
-    return redirect('/')
+    return redirect('/?success=1')
 
 
 # ---------------- LOGIN ----------------
@@ -137,8 +133,8 @@ def login():
         conn.close()
 
         if user:
-            session['user'] = user['username']
             session['role'] = user['role']
+            session['user'] = user['username']
             return redirect('/admin')
         else:
             error = "Invalid Username or Password"
@@ -161,14 +157,16 @@ def admin():
 
     conn = get_connection()
     orders = conn.execute("""
-        SELECT orders.id,
-               orders.shop_name,
-               orders.address,
-               products.name,
-               orders.quantity,
-               orders.status
+        SELECT 
+            orders.id,
+            orders.shop_name,
+            orders.address,
+            products.name,
+            orders.quantity,
+            orders.status
         FROM orders
         JOIN products ON orders.product_id = products.id
+        ORDER BY orders.id DESC
     """).fetchall()
     conn.close()
 
@@ -182,13 +180,15 @@ def deliver(order_id):
         return redirect('/login')
 
     conn = get_connection()
-    conn.execute("UPDATE orders SET status='Delivered' WHERE id=?", (order_id,))
+    conn.execute(
+        "UPDATE orders SET status='Delivered' WHERE id=?",
+        (order_id,)
+    )
     conn.commit()
     conn.close()
 
     return redirect('/admin')
 
 
-# ---------------- LOCAL RUN ----------------
 if __name__ == "__main__":
     app.run(debug=True)
